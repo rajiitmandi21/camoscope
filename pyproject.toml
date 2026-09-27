@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camoscope"
-version = "0.1.1"
-description = "Inspect macOS windows with WindowServer sharing state zero and their owning processes."
+version = "0.1.2"
+description = "Investigate Mac app windows concealed from screen sharing during online interviews."
 readme = "README.md"
 requires-python = ">=3.9,<3.15"
 license = "MIT"
@@ -39,8 +39,10 @@ macos = [
 camoscope = "camoscope.cli:main"
 
 [project.urls]
-Homepage = "https://pypi.org/project/camoscope/"
+Homepage = "https://www.rajsharma.space/"
 Documentation = "https://pypi.org/project/camoscope/"
+Support = "https://www.rajsharma.space/#contact"
+Funding = "https://github.com/sponsors/rajiitmandi21"
 
 [tool.setuptools.packages.find]
 where = ["src"]

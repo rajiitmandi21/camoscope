@@ -6,7 +6,7 @@ from camoscope import cli
 
 
 def test_version_is_exposed():
-    assert __version__ == "0.1.1"
+    assert __version__ == "0.1.2"
 
 
 def test_version_flag_is_available(capsys):
@@ -14,7 +14,7 @@ def test_version_flag_is_available(capsys):
         cli.main(["--version"])
 
     assert raised.value.code == 0
-    assert capsys.readouterr().out.strip() == "camoscope 0.1.1"
+    assert capsys.readouterr().out.strip() == "camoscope 0.1.2"
 
 
 def test_linux_install_has_a_clear_runtime_message(monkeypatch, capsys):
@@ -128,7 +128,7 @@ def test_window_enumeration_failure_is_not_empty_scan(monkeypatch, capsys):
         ),
     )
     assert cli.main(["--no-prompt"]) == 1
-    assert "enumeration failed" in capsys.readouterr().err
+    assert "window scan failed" in capsys.readouterr().err
 
 
 def test_scan_selects_only_zero_sharing_state(monkeypatch):

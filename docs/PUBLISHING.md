@@ -7,28 +7,26 @@ their contents and platform coverage, and checks their metadata before
 entering the `pypi` GitHub environment. Only the publish job receives OIDC
 `id-token: write` permission. **Do not upload a source distribution.**
 
-## One-time account setup
+## Trusted Publisher configuration
 
-1. Use a PyPI account with a verified email and register a **pending Trusted
-   Publisher** for the new project `camoscope` at
-   <https://pypi.org/manage/account/publishing/>. Select GitHub Actions and
-   enter exactly:
+`camoscope` is already published on PyPI through GitHub Actions Trusted
+Publishing. Keep the publisher configuration aligned with these values:
 
-   | Field | Value |
-   | --- | --- |
-   | PyPI project | `camoscope` |
-   | GitHub owner | `rajiitmandi21` |
-   | GitHub repository | `camoscope` |
-   | Workflow file | `publish.yml` |
-   | GitHub environment | `pypi` |
+| Field | Value |
+| --- | --- |
+| PyPI project | `camoscope` |
+| GitHub owner | `rajiitmandi21` |
+| GitHub repository | `camoscope` |
+| Workflow file | `publish.yml` |
+| GitHub environment | `pypi` |
 
-2. In the GitHub repository, configure the `pypi` environment for deployment
-   only from tags matching `v*`. This private repository's current GitHub
-   billing plan rejected the required-reviewer protection rule, so the
-   workflow uses a manual `workflow_dispatch` input named `publish` (default
-   `false`) as the release gate. Only the repository owner should dispatch
-   it with `publish=true`. Keep the release workflow reviewable: a
-   contributor who can change it can affect what gets published.
+In the GitHub repository, restrict the `pypi` environment to tags matching
+`v*`. This private repository's current GitHub billing plan rejected the
+required-reviewer protection rule, so the workflow uses a manual
+`workflow_dispatch` input named `publish` (default `false`) as the release
+gate. Only the repository owner should dispatch it with `publish=true`. Keep
+the release workflow reviewable: a contributor who can change it can affect
+what gets published.
 
 The GitHub repository remains private. PyPI receives only compiled macOS
 wheels. The wheel contains a small Python entry-point stub and the compiled
@@ -38,8 +36,7 @@ inspection rather than guaranteeing secrecy.
 
 ## Release steps
 
-1. Confirm the package name is available and the release version has never
-   been uploaded to PyPI. Bump the version in `pyproject.toml`,
+1. Confirm the release version has never been uploaded to PyPI. Bump the version in `pyproject.toml`,
    `src/camoscope/__init__.py`, the CLI `--version` string, and its tests.
 2. Run tests, build a local macOS wheel, run `scripts/audit_wheels.py` and
    `twine check --strict`, and perform a clean macOS install smoke. Review
@@ -47,12 +44,11 @@ inspection rather than guaranteeing secrecy.
    behavior, supported platform claims, and absence of readable audit source.
 3. Push the reviewed commit, then dispatch `publish.yml` on `main` with
    `publish=false`. Inspect the complete wheel matrix and the audit job.
-4. Create and push the matching annotated version tag. After the pending
-   PyPI publisher is registered, dispatch `publish.yml` on that tag with
-   `publish=true`. The build and audit jobs must pass again before the upload
-   job runs in the tag-restricted `pypi` environment. PyPI matches the
-   workflow's OIDC identity to the pending publisher and creates the project
-   on first successful upload.
+4. Create and push the matching annotated version tag. Dispatch
+   `publish.yml` on that tag with `publish=true`. The build and audit jobs
+   must pass again before the upload job runs in the tag-restricted `pypi`
+   environment. PyPI matches the workflow's OIDC identity to the registered
+   publisher.
 5. Confirm the PyPI project page, version, compiled wheel files,
    provenance/attestations, and `python -m pip install camoscope==<version>`
    in fresh Intel and Apple Silicon macOS environments. There should be no

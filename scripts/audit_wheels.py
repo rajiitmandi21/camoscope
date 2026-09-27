@@ -32,9 +32,13 @@ def audit(directory: Path, require_complete_matrix: bool) -> None:
             implementation = [name for name in names if name.startswith("camoscope/")]
             if not any(name.startswith("camoscope/cli.") and name.endswith(".so") for name in implementation):
                 raise SystemExit(f"compiled CLI missing from {wheel.name}")
-            exposed = [name for name in names if name.endswith((".py", ".pyx", ".c", ".h")) and name not in ALLOWED_PYTHON]
+            exposed = [
+                name for name in names
+                if (name.endswith((".py", ".pyx", ".pyc", ".pyo", ".c", ".h")) and name not in ALLOWED_PYTHON)
+                or "__pycache__/" in name
+            ]
             if exposed:
-                raise SystemExit(f"readable implementation found in {wheel.name}: {exposed}")
+                raise SystemExit(f"disallowed source or bytecode found in {wheel.name}: {exposed}")
         print(f"audited {wheel.name}")
 
     expected = {(python, arch) for python in PYTHONS for arch in ARCHES}

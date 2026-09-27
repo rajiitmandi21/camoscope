@@ -1,8 +1,7 @@
-"""Inspect macOS windows whose WindowServer sharing state is zero.
+"""Review Mac app windows that may be missing from a screen share.
 
-This is a metadata observation, not proof that every capture backend omits
-the window. AX reads inspect the owning app's exposed windows, which may
-include windows other than those found by the WindowServer scan.
+Results are clues, not proof of what any recording or sharing app captures.
+Accessibility reads may include other windows belonging to the same app.
 """
 import argparse
 import ctypes
@@ -34,12 +33,11 @@ def _require_macos_runtime():
     """Raise a user-facing error when the macOS-only runtime is unavailable."""
     if sys.platform != "darwin":
         raise RuntimeError(
-            "Camoscope's WindowServer and Accessibility audit requires macOS; "
-            "the package can be installed on Linux, but this command is macOS-only."
+            "Camoscope requires macOS."
         )
     if AX is None or Quartz is None or NSRunningApplication is None:
         raise RuntimeError(
-            "Camoscope's macOS dependencies are missing. Reinstall from the private release or repository."
+            "Camoscope's macOS dependencies are missing. Reinstall the package from PyPI."
         )
 
 
@@ -61,12 +59,12 @@ def _libproc_library():
 # ---------------------------------------------------------------------------
 
 def scan_hidden_windows():
-    """Return on-screen windows whose WindowServer sharing state is zero."""
+    """Return on-screen windows flagged for visibility review."""
     _require_macos_runtime()
     options = Quartz.kCGWindowListOptionOnScreenOnly
     window_list = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
     if window_list is None:
-        raise RuntimeError("WindowServer window enumeration failed; scan result is unknown")
+        raise RuntimeError("macOS window scan failed; the result is unknown")
 
     hidden = []
     for w in window_list:
@@ -197,7 +195,7 @@ def print_report(apps, total_windows=None, show_content=True, content_lines=15):
     ts = time.strftime("%H:%M:%S")
     if total_windows is None:
         total_windows = sum(a["count"] for a in apps)
-    print(f"\n[{ts}] scan complete -- {len(apps)} app(s), {total_windows} window(s) with WindowServer sharing state 0")
+    print(f"\n[{ts}] scan complete -- {len(apps)} app(s), {total_windows} window(s) flagged for review")
     if not apps:
         return
     print(f"  {'#':<3} {'PID':<8} {'OWNER':<28} {'SIZE':<10} WINDOW(S)")
@@ -270,7 +268,7 @@ def dump_ax_content(pid, max_depth=25, max_nodes=1500):
     app = AX.AXUIElementCreateApplication(pid)
     windows = _ax_get(app, AX.kAXWindowsAttribute) or []
     if not windows:
-        return ["(no AX windows exposed for this pid -- app may be backgrounded or expose no AX tree)"]
+        return ["(no accessible windows exposed for this app -- it may be backgrounded or offer no readable content)"]
 
     lines = []
     counter = [0]
@@ -281,12 +279,12 @@ def dump_ax_content(pid, max_depth=25, max_nodes=1500):
         _walk(w, 0, max_depth, max_nodes, counter, lines, seen)
 
     if not any(line.strip() and not line.startswith("---") for line in lines):
-        lines.append("(no text content found -- app may render via a custom GPU surface with no AX text)")
+        lines.append("(no readable text found -- this app may not expose its content to Accessibility)")
     return lines
 
 
 def stream_content(pid, owner_name, interval=3):
-    print(f"streaming AX content of pid {pid} ({owner_name}) every {interval}s. Ctrl+C to stop.\n")
+    print(f"checking accessible text from pid {pid} ({owner_name}) every {interval}s. Ctrl+C to stop.\n")
     last = None
     try:
         while True:
@@ -472,17 +470,17 @@ def interactive_menu(apps):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="camoscope",
-        description="Inspect on-screen macOS windows with WindowServer sharing state zero.",
+        description="Investigate Mac app windows concealed from screen sharing during online interviews.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.1")
-    parser.add_argument("--watch", action="store_true", help="continuously rescan for hidden windows")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.2")
+    parser.add_argument("--watch", action="store_true", help="continuously rescan for windows to review")
     parser.add_argument("--no-prompt", action="store_true", help="scan once, print, and exit (no menu)")
     parser.add_argument("--quit", type=_positive_pid, metavar="PID", help="quit the process at PID non-interactively")
-    parser.add_argument("--dump", type=_positive_pid, metavar="PID", help="dump AX content of PID once, non-interactively")
-    parser.add_argument("--stream", type=_positive_pid, metavar="PID", help="stream AX content of PID, non-interactively")
+    parser.add_argument("--dump", type=_positive_pid, metavar="PID", help="show accessible app text once, non-interactively")
+    parser.add_argument("--stream", type=_positive_pid, metavar="PID", help="repeat accessible app text checks, non-interactively")
     parser.add_argument("--interval", type=_positive_interval, default=3, help="seconds between --stream refreshes (default 3)")
-    parser.add_argument("--no-content", action="store_true", help="one-shot scan: skip the AX content preview")
-    parser.add_argument("--content", action="store_true", help="--watch mode: also print AX content each rescan (off by default -- noisier/slower)")
+    parser.add_argument("--no-content", action="store_true", help="one-shot scan: skip the text preview")
+    parser.add_argument("--content", action="store_true", help="--watch mode: also show available text each rescan")
     args = parser.parse_args(argv)
 
     try:
@@ -501,7 +499,7 @@ def main(argv=None):
         if args.quit is not None:
             owner = owner_for(args.quit)
             if owner is None:
-                raise RuntimeError(f"pid {args.quit} has no window with WindowServer sharing state zero")
+                raise RuntimeError(f"pid {args.quit} has no window flagged in the current scan")
             return 0 if quit_process(args.quit, owner) else 1
         if args.dump is not None:
             for line in dump_ax_content(args.dump):
@@ -512,7 +510,7 @@ def main(argv=None):
             return 0
 
         if args.watch:
-            print("Watching for WindowServer sharing-state-zero windows (Ctrl+C to stop)...")
+            print("Watching for app windows to review (Ctrl+C to stop)...")
             try:
                 while True:
                     print_report(_dedupe_by_app(scan_hidden_windows()), show_content=args.content)

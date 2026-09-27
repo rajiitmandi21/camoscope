@@ -1,5 +1,5 @@
 class Camoscope < Formula
-  desc "Audit a macOS screen-share session for windows hidden from capture"
+  desc "Investigate Mac app windows concealed from screen sharing"
   homepage "https://github.com/rajiitmandi21/camoscope"
 
   # TODO: fill in once a tagged release/tarball exists.

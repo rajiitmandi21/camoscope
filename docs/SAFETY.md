@@ -1,7 +1,8 @@
 # Safety and interpretation
 
-Camoscope is for a person to inspect their own Mac before or during their own
-screen-share session. It has no background service, installer hook, or network
+Camoscope helps interviewers investigate possible concealed app windows during
+an online interview. It runs on the participant's Mac with their knowledge
+and consent. It has no background service, installer hook, or network
 client. Installing or importing the package does not inspect windows or act
 on processes. Results are printed locally to the terminal and are not saved
 or transmitted by Camoscope.
