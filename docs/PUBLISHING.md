@@ -22,11 +22,13 @@ entering the `pypi` GitHub environment. Only the publish job receives OIDC
    | Workflow file | `publish.yml` |
    | GitHub environment | `pypi` |
 
-2. In the GitHub repository, protect the `pypi` environment with a required
-   human reviewer and restrict deployment to tags matching `v*`. Keep the
-   release workflow reviewable: a contributor who can change it can affect
-   what gets published. PyPI's trusted-publisher guidance recommends this
-   manual approval gate.
+2. In the GitHub repository, configure the `pypi` environment for deployment
+   only from tags matching `v*`. This private repository's current GitHub
+   billing plan rejected the required-reviewer protection rule, so the
+   workflow uses a manual `workflow_dispatch` input named `publish` (default
+   `false`) as the release gate. Only the repository owner should dispatch
+   it with `publish=true`. Keep the release workflow reviewable: a
+   contributor who can change it can affect what gets published.
 
 The GitHub repository remains private. PyPI receives only compiled macOS
 wheels. The wheel contains a small Python entry-point stub and the compiled
@@ -43,11 +45,14 @@ inspection rather than guaranteeing secrecy.
    `twine check --strict`, and perform a clean macOS install smoke. Review
    the README and wheel contents for accurate permissions, local-only
    behavior, supported platform claims, and absence of readable audit source.
-3. Push the reviewed commit and matching annotated version tag.
-4. Dispatch `publish.yml` on that tag. The build job must pass before a human
-   approves the protected `pypi` environment. PyPI matches the workflow's
-   OIDC identity to the pending publisher and creates the project on first
-   successful upload.
+3. Push the reviewed commit, then dispatch `publish.yml` on `main` with
+   `publish=false`. Inspect the complete wheel matrix and the audit job.
+4. Create and push the matching annotated version tag. After the pending
+   PyPI publisher is registered, dispatch `publish.yml` on that tag with
+   `publish=true`. The build and audit jobs must pass again before the upload
+   job runs in the tag-restricted `pypi` environment. PyPI matches the
+   workflow's OIDC identity to the pending publisher and creates the project
+   on first successful upload.
 5. Confirm the PyPI project page, version, compiled wheel files,
    provenance/attestations, and `python -m pip install camoscope==<version>`
    in fresh Intel and Apple Silicon macOS environments. There should be no
