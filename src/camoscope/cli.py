@@ -1,49 +1,59 @@
-"""
-Camoscope: audit a macOS screen-share session for windows hidden from
-screen capture/sharing (kCGWindowSharingState == 0) -- windows a sharer's
-Zoom/Meet/Teams stream or a screenshot/recording would never show, even
-though they're on screen right now. Detection uses the same WindowServer-
-level flag every screen-share tool actually consults (CGWindowListCopyWindowInfo),
-so it's ground truth about the app, not the app's own claim about itself --
-it works the same way for a known tool or a completely unknown one, because
-it doesn't need to know anything about the app.
+"""Inspect macOS windows whose WindowServer sharing state is zero.
 
-Once a hidden window is found, three actions are available on it:
-  - quit    : terminate the owning process (graceful app-quit, then SIGTERM,
-              then SIGKILL if it won't close).
-  - dump    : one-shot read of that app's live on-screen text via the
-              Accessibility (AX) tree -- a second, independent pathway from
-              the capture pipeline, so it can read text content regardless
-              of sharingType. Generic: walks whatever AX hierarchy the app
-              exposes, no per-app assumptions.
-  - stream  : repeat the dump on an interval and print only when it changes,
-              so the sharer can watch a hidden app's live content in the
-              terminal (itself visible/shareable) without ever unhiding the
-              window.
-
-Usage:
-    camoscope                 # scan + interactive menu
-    camoscope --watch          # rescan every 2s, no menu
-    camoscope --no-prompt      # scan once, print, exit
-    camoscope --quit PID
-    camoscope --dump PID
-    camoscope --stream PID [--interval SECONDS]
-
-Intended use: run by the person sharing their own screen, to audit their
-own machine before/during their own call. Not a remote-deployment
-surveillance tool for auditing someone else's machine without consent.
+This is a metadata observation, not proof that every capture backend omits
+the window. AX reads inspect the owning app's exposed windows, which may
+include windows other than those found by the WindowServer scan.
 """
 import argparse
 import ctypes
+import math
 import os
 import signal
 import subprocess
+import sys
 import time
 
-import ApplicationServices as AX
-import Quartz
+if sys.platform == "darwin":
+    try:
+        import ApplicationServices as AX
+        import Quartz
+        from AppKit import NSRunningApplication
+    except ImportError:  # pragma: no cover - exercised by a missing macOS install
+        AX = None
+        Quartz = None
+        NSRunningApplication = None
+else:
+    AX = None
+    Quartz = None
+    NSRunningApplication = None
 
-TEXT_ATTRS = [AX.kAXValueAttribute, AX.kAXTitleAttribute, AX.kAXDescriptionAttribute]
+_libproc = None
+
+
+def _require_macos_runtime():
+    """Raise a user-facing error when the macOS-only runtime is unavailable."""
+    if sys.platform != "darwin":
+        raise RuntimeError(
+            "Camoscope's WindowServer and Accessibility audit requires macOS; "
+            "the package can be installed on Linux, but this command is macOS-only."
+        )
+    if AX is None or Quartz is None or NSRunningApplication is None:
+        raise RuntimeError(
+            "Camoscope's macOS dependencies are missing. Reinstall from the private release or repository."
+        )
+
+
+def _text_attrs():
+    _require_macos_runtime()
+    return [AX.kAXValueAttribute, AX.kAXTitleAttribute, AX.kAXDescriptionAttribute]
+
+
+def _libproc_library():
+    global _libproc
+    if _libproc is None:
+        _require_macos_runtime()
+        _libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+    return _libproc
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +61,12 @@ TEXT_ATTRS = [AX.kAXValueAttribute, AX.kAXTitleAttribute, AX.kAXDescriptionAttri
 # ---------------------------------------------------------------------------
 
 def scan_hidden_windows():
-    """Return a list of dicts for every on-screen window excluded from capture."""
+    """Return on-screen windows whose WindowServer sharing state is zero."""
+    _require_macos_runtime()
     options = Quartz.kCGWindowListOptionOnScreenOnly
-    window_list = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+    window_list = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID)
+    if window_list is None:
+        raise RuntimeError("WindowServer window enumeration failed; scan result is unknown")
 
     hidden = []
     for w in window_list:
@@ -84,23 +97,22 @@ def scan_hidden_windows():
 # and its code-signing chain.
 # ---------------------------------------------------------------------------
 
-_libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
-
-
 def _real_executable_path(pid):
     """proc_pidpath(3) -- the actual on-disk executable, unlike `ps -o comm=`
     which macOS often truncates to a bare basename (e.g. "python3" instead
     of "/opt/miniconda3/bin/python3.10"), which would make every path-based
     check below silently useless.
     """
+    libproc = _libproc_library()
     buf = ctypes.create_string_buffer(4096)
-    ret = _libproc.proc_pidpath(pid, buf, 4096)
+    ret = libproc.proc_pidpath(pid, buf, 4096)
     if ret <= 0:
         return None
     return buf.value.decode("utf-8", "replace")
 
 
 def get_process_identity(pid):
+    _require_macos_runtime()
     info = {"path": None, "signed": None, "adhoc": False, "team_id": None, "authority": None}
     path = _real_executable_path(pid)
     info["path"] = path or None
@@ -111,7 +123,7 @@ def get_process_identity(pid):
         result = subprocess.run(
             ["codesign", "-dv", "--verbose=2", path], capture_output=True, text=True, timeout=5
         )
-        out = result.stderr
+        out = result.stderr or ""
     except Exception:
         return info
 
@@ -119,6 +131,10 @@ def get_process_identity(pid):
         info["signed"] = False
         return info
 
+    if result.returncode != 0:
+        return info
+    if not any(line.startswith(("Signature=", "Authority=")) for line in out.splitlines()):
+        return info
     info["signed"] = True
     for line in out.splitlines():
         line = line.strip()
@@ -149,6 +165,8 @@ def _identity_flag(h):
     if ident.get("adhoc"):
         return "  [?] ad-hoc signed (not Apple) -- common for dev tools too, but worth a manual look"
     authority = ident.get("authority") or ""
+    if ident.get("signed") is None:
+        return "  [?] signature inspection unavailable -- worth a manual look"
     if "Apple" not in authority and "Software Signing" not in authority:
         return f"  [?] signed by '{authority or 'unknown'}', not Apple -- worth a manual look"
     if not path.startswith(("/usr/", "/System/", "/bin/", "/sbin/")):
@@ -179,7 +197,7 @@ def print_report(apps, total_windows=None, show_content=True, content_lines=15):
     ts = time.strftime("%H:%M:%S")
     if total_windows is None:
         total_windows = sum(a["count"] for a in apps)
-    print(f"\n[{ts}] scan complete -- {len(apps)} app(s), {total_windows} window(s) hidden from screen capture")
+    print(f"\n[{ts}] scan complete -- {len(apps)} app(s), {total_windows} window(s) with WindowServer sharing state 0")
     if not apps:
         return
     print(f"  {'#':<3} {'PID':<8} {'OWNER':<28} {'SIZE':<10} WINDOW(S)")
@@ -192,9 +210,9 @@ def print_report(apps, total_windows=None, show_content=True, content_lines=15):
         print(f"  {i:<3} {h['pid']:<8} {h['owner']:<28} {size:<10} {windows}{_identity_flag(h)}")
         ident = h.get("identity") or {}
         if ident.get("path"):
-            sig = "unsigned" if ident.get("signed") is False else (
+            sig = "inspection unavailable" if ident.get("signed") is None else ("unsigned" if ident.get("signed") is False else (
                 "adhoc" if ident.get("adhoc") else (ident.get("authority") or "signed, authority unknown")
-            )
+            ))
             print(f"      path: {ident['path']}")
             print(f"      signature: {sig}" + (f"  team: {ident['team_id']}" if ident.get("team_id") else ""))
         if show_content and h["pid"]:
@@ -211,6 +229,7 @@ def print_report(apps, total_windows=None, show_content=True, content_lines=15):
 # ---------------------------------------------------------------------------
 
 def _ax_get(elem, attr):
+    _require_macos_runtime()
     err, val = AX.AXUIElementCopyAttributeValue(elem, attr, None)
     return val if err == 0 else None
 
@@ -226,7 +245,7 @@ def _walk(elem, depth, max_depth, max_nodes, counter, lines, seen):
 
     role = _ax_get(elem, AX.kAXRoleAttribute) or ""
     texts = []
-    for attr in TEXT_ATTRS:
+    for attr in _text_attrs():
         v = _ax_get(elem, attr)
         if isinstance(v, str) and v.strip():
             texts.append(v.strip())
@@ -244,11 +263,9 @@ def dump_ax_content(pid, max_depth=25, max_nodes=1500):
     Works for any app, known or not -- it makes no assumption about window
     names or UI structure, it just walks whatever hierarchy exists.
     """
+    _require_macos_runtime()
     if not AX.AXIsProcessTrusted():
-        return [
-            "[error] this terminal is not trusted for Accessibility.",
-            "Grant it in System Settings -> Privacy & Security -> Accessibility, then re-run.",
-        ]
+        raise RuntimeError("Accessibility access is denied; grant this terminal access in System Settings -> Privacy & Security -> Accessibility")
 
     app = AX.AXUIElementCreateApplication(pid)
     windows = _ax_get(app, AX.kAXWindowsAttribute) or []
@@ -273,6 +290,8 @@ def stream_content(pid, owner_name, interval=3):
     last = None
     try:
         while True:
+            if not _pid_alive(pid):
+                raise RuntimeError(f"pid {pid} is no longer running")
             snapshot = "\n".join(dump_ax_content(pid))
             ts = time.strftime("%H:%M:%S")
             if snapshot != last:
@@ -287,10 +306,49 @@ def stream_content(pid, owner_name, interval=3):
 
 
 # ---------------------------------------------------------------------------
-# Quit (graceful app-quit -> SIGTERM -> SIGKILL, keyed off the exact pid)
+# Quit (PID-bound app termination -> SIGTERM -> SIGKILL)
 # ---------------------------------------------------------------------------
 
+def _positive_pid(value):
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("PID must be a positive integer")
+    if pid <= 0:
+        raise argparse.ArgumentTypeError("PID must be a positive integer")
+    return pid
+
+
+def _positive_interval(value):
+    try:
+        interval = float(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("interval must be a positive finite number")
+    if not math.isfinite(interval) or interval <= 0:
+        raise argparse.ArgumentTypeError("interval must be a positive finite number")
+    return interval
+
+
+def _process_start(pid):
+    """Use the app's native launch date as a PID-reuse guard."""
+    app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+    if app is None or app.launchDate() is None:
+        return None
+    return app.launchDate().timeIntervalSinceReferenceDate()
+
+
+def _same_process(pid, start):
+    return start is not None and _process_start(pid) == start
+
+
+def _target_state(pid, start):
+    if _same_process(pid, start):
+        return "running"
+    return "changed" if _pid_alive(pid) else "exited"
+
 def _pid_alive(pid):
+    if pid <= 0:
+        return False
     try:
         os.kill(pid, 0)
         return True
@@ -301,24 +359,37 @@ def _pid_alive(pid):
 
 
 def quit_process(pid, owner_name, grace_seconds=3):
+    _require_macos_runtime()
+    if pid <= 0:
+        raise ValueError("PID must be positive")
+    start = _process_start(pid)
+    if start is None:
+        print(f"  pid {pid} is not a running macOS app with an inspectable launch date.")
+        return False
     print(f"attempting graceful quit of '{owner_name}' (pid {pid})...")
     try:
-        subprocess.run(
-            ["osascript", "-e", f'tell application "{owner_name}" to quit'],
-            timeout=5,
-            capture_output=True,
-        )
+        app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+        if app is not None:
+            app.terminate()
     except Exception as e:
         print(f"  (graceful quit attempt errored: {e})")
 
     deadline = time.time() + grace_seconds
     while time.time() < deadline:
-        if not _pid_alive(pid):
+        state = _target_state(pid, start)
+        if state == "exited":
             print("  quit succeeded (graceful).")
             return True
+        if state == "changed":
+            print("  target changed; refusing to signal it.")
+            return False
         time.sleep(0.3)
 
     print("  still running -- sending SIGTERM...")
+    state = _target_state(pid, start)
+    if state != "running":
+        print("  target exited before SIGTERM." if state == "exited" else "  target changed; refusing to signal it.")
+        return state == "exited"
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
@@ -330,16 +401,34 @@ def quit_process(pid, owner_name, grace_seconds=3):
 
     deadline = time.time() + grace_seconds
     while time.time() < deadline:
-        if not _pid_alive(pid):
+        state = _target_state(pid, start)
+        if state == "exited":
             print("  quit succeeded (SIGTERM).")
             return True
+        if state == "changed":
+            print("  target changed; refusing to signal it.")
+            return False
         time.sleep(0.3)
 
     print("  still running -- sending SIGKILL (force quit)...")
+    state = _target_state(pid, start)
+    if state != "running":
+        print("  target exited before SIGKILL." if state == "exited" else "  target changed; refusing to signal it.")
+        return state == "exited"
     try:
         os.kill(pid, signal.SIGKILL)
-        print("  force-killed.")
-        return True
+        deadline = time.time() + grace_seconds
+        while time.time() < deadline:
+            state = _target_state(pid, start)
+            if state == "exited":
+                print("  force-killed.")
+                return True
+            if state == "changed":
+                print("  target changed after SIGKILL.")
+                return False
+            time.sleep(0.3)
+        print("  process still appears to be running after SIGKILL.")
+        return False
     except (ProcessLookupError, PermissionError) as e:
         print(f"  could not force-kill: {e}")
         return False
@@ -357,7 +446,10 @@ def interactive_menu(apps):
     if not choice:
         return
     try:
-        target = apps[int(choice)]
+        index = int(choice)
+        if index < 0:
+            raise IndexError
+        target = apps[index]
     except (ValueError, IndexError):
         print("invalid selection.")
         return
@@ -377,50 +469,67 @@ def interactive_menu(apps):
 
 # ---------------------------------------------------------------------------
 
-def main():
-    parser = argparse.ArgumentParser(description="Audit a screen-share session for windows hidden from capture.")
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="camoscope",
+        description="Inspect on-screen macOS windows with WindowServer sharing state zero.",
+    )
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
     parser.add_argument("--watch", action="store_true", help="continuously rescan for hidden windows")
     parser.add_argument("--no-prompt", action="store_true", help="scan once, print, and exit (no menu)")
-    parser.add_argument("--quit", type=int, metavar="PID", help="quit the process at PID non-interactively")
-    parser.add_argument("--dump", type=int, metavar="PID", help="dump AX content of PID once, non-interactively")
-    parser.add_argument("--stream", type=int, metavar="PID", help="stream AX content of PID, non-interactively")
-    parser.add_argument("--interval", type=float, default=3, help="seconds between --stream refreshes (default 3)")
+    parser.add_argument("--quit", type=_positive_pid, metavar="PID", help="quit the process at PID non-interactively")
+    parser.add_argument("--dump", type=_positive_pid, metavar="PID", help="dump AX content of PID once, non-interactively")
+    parser.add_argument("--stream", type=_positive_pid, metavar="PID", help="stream AX content of PID, non-interactively")
+    parser.add_argument("--interval", type=_positive_interval, default=3, help="seconds between --stream refreshes (default 3)")
     parser.add_argument("--no-content", action="store_true", help="one-shot scan: skip the AX content preview")
     parser.add_argument("--content", action="store_true", help="--watch mode: also print AX content each rescan (off by default -- noisier/slower)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+
+    try:
+        _require_macos_runtime()
+    except RuntimeError as error:
+        print(f"camoscope: {error}", file=sys.stderr)
+        return 2
 
     def owner_for(pid):
         for h in scan_hidden_windows():
             if h["pid"] == pid:
                 return h["owner"]
-        return str(pid)
+        return None
 
-    if args.quit is not None:
-        quit_process(args.quit, owner_for(args.quit))
-        return
-    if args.dump is not None:
-        for line in dump_ax_content(args.dump):
-            print(line)
-        return
-    if args.stream is not None:
-        stream_content(args.stream, owner_for(args.stream), interval=args.interval)
-        return
+    try:
+        if args.quit is not None:
+            owner = owner_for(args.quit)
+            if owner is None:
+                raise RuntimeError(f"pid {args.quit} has no window with WindowServer sharing state zero")
+            return 0 if quit_process(args.quit, owner) else 1
+        if args.dump is not None:
+            for line in dump_ax_content(args.dump):
+                print(line)
+            return 0
+        if args.stream is not None:
+            stream_content(args.stream, owner_for(args.stream) or str(args.stream), interval=args.interval)
+            return 0
 
-    if args.watch:
-        print("Watching for capture-hidden windows (Ctrl+C to stop)...")
-        try:
-            while True:
-                print_report(_dedupe_by_app(scan_hidden_windows()), show_content=args.content)
-                time.sleep(2)
-        except KeyboardInterrupt:
-            print("\nstopped.")
-        return
+        if args.watch:
+            print("Watching for WindowServer sharing-state-zero windows (Ctrl+C to stop)...")
+            try:
+                while True:
+                    print_report(_dedupe_by_app(scan_hidden_windows()), show_content=args.content)
+                    time.sleep(2)
+            except KeyboardInterrupt:
+                print("\nstopped.")
+            return 0
 
-    apps = _dedupe_by_app(scan_hidden_windows())
-    print_report(apps, show_content=not args.no_content)
-    if not args.no_prompt:
-        interactive_menu(apps)
+        apps = _dedupe_by_app(scan_hidden_windows())
+        print_report(apps, show_content=not args.no_content)
+        if not args.no_prompt:
+            interactive_menu(apps)
+        return 0
+    except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+        print(f"camoscope: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

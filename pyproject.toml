@@ -5,23 +5,45 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "camoscope"
 version = "0.1.0"
-description = "Audit a macOS screen-share session for windows hidden from capture, verify their real identity, and preview their content."
+description = "Inspect macOS windows with WindowServer sharing state zero and their owning processes."
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
 classifiers = [
     "Operating System :: MacOS",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: Linux",
     "Environment :: Console",
     "Programming Language :: Python :: 3",
     "Private :: Do Not Upload",
 ]
 dependencies = [
-    "pyobjc-framework-Quartz",
-    "pyobjc-framework-ApplicationServices",
+    "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.3; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+]
+macos = [
+    "pyobjc-framework-Quartz>=10.3",
+    "pyobjc-framework-ApplicationServices>=10.3",
+    "pyobjc-framework-Cocoa>=10.3",
 ]
 
 [project.scripts]
 camoscope = "camoscope.cli:main"
 
+[project.urls]
+Homepage = "https://github.com/rajiitmandi21/camoscope"
+Repository = "https://github.com/rajiitmandi21/camoscope"
+Issues = "https://github.com/rajiitmandi21/camoscope/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
