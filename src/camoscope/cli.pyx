@@ -33,7 +33,7 @@ def _require_macos_runtime():
     """Raise a user-facing error when the macOS-only runtime is unavailable."""
     if sys.platform != "darwin":
         raise RuntimeError(
-            "Camoscope requires macOS."
+            "This operating system is not supported. Camoscope runs on macOS only."
         )
     if AX is None or Quartz is None or NSRunningApplication is None:
         raise RuntimeError(
@@ -472,7 +472,7 @@ def main(argv=None):
         prog="camoscope",
         description="Investigate Mac app windows concealed from screen sharing during online interviews.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.2")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.3")
     parser.add_argument("--watch", action="store_true", help="continuously rescan for windows to review")
     parser.add_argument("--no-prompt", action="store_true", help="scan once, print, and exit (no menu)")
     parser.add_argument("--quit", type=_positive_pid, metavar="PID", help="quit the process at PID non-interactively")

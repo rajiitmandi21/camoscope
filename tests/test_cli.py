@@ -6,7 +6,7 @@ from camoscope import cli
 
 
 def test_version_is_exposed():
-    assert __version__ == "0.1.2"
+    assert __version__ == "0.1.3"
 
 
 def test_version_flag_is_available(capsys):
@@ -14,14 +14,14 @@ def test_version_flag_is_available(capsys):
         cli.main(["--version"])
 
     assert raised.value.code == 0
-    assert capsys.readouterr().out.strip() == "camoscope 0.1.2"
+    assert capsys.readouterr().out.strip() == "camoscope 0.1.3"
 
 
 def test_linux_install_has_a_clear_runtime_message(monkeypatch, capsys):
     monkeypatch.setattr(cli.sys, "platform", "linux")
 
     assert cli.main(["--no-prompt"]) == 2
-    assert "requires macOS" in capsys.readouterr().err
+    assert "not supported" in capsys.readouterr().err
 
 
 def test_macos_install_without_optional_dependencies_has_a_clear_message(monkeypatch, capsys):
@@ -61,10 +61,10 @@ def test_identity_flag_is_a_hint_for_unsigned_system_named_process():
 def test_macos_only_operations_fail_cleanly_off_macos(monkeypatch):
     monkeypatch.setattr(cli.sys, "platform", "linux")
 
-    with pytest.raises(RuntimeError, match="requires macOS"):
+    with pytest.raises(RuntimeError, match="not supported"):
         cli.scan_hidden_windows()
 
-    with pytest.raises(RuntimeError, match="requires macOS"):
+    with pytest.raises(RuntimeError, match="not supported"):
         cli.dump_ax_content(123)
 
 

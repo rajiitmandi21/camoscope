@@ -1,6 +1,6 @@
 """Camoscope: investigate Mac app windows concealed from screen sharing."""
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from camoscope.cli import main
 

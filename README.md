@@ -4,15 +4,11 @@
 [Get help](https://www.rajsharma.space/#contact) ·
 [Support this and other apps](https://github.com/sponsors/rajiitmandi21)
 
-Camoscope helps interviewers and proctors investigate app windows a participant
-may be concealing from a screen share, including during online interviews.
-Run with the participant's knowledge and consent on their Mac, it identifies
-windows marked as excluded from capture, shows the owning app and available
-app details, and can show text exposed to Accessibility tools.
-
-It flags on-screen windows for which macOS reports WindowServer
-`kCGWindowSharingState` as `0`. That flag is a clue to investigate, not a
-measurement of what a particular screen-sharing or recording app captures.
+Camoscope is a macOS tool that helps interviewers and proctors investigate app
+windows a participant may be concealing from a screen share, including during
+online interviews. Run with the participant's knowledge and consent on their
+Mac, it flags windows for review, shows the owning app and available app
+details, and can optionally show text exposed to Accessibility tools.
 
 Installing or importing Camoscope does not scan windows, read app text, or
 quit apps. It does not send scan results to a server. Those actions happen
@@ -49,12 +45,14 @@ interviewer's Mac.
 On macOS with CPython 3.9 through 3.14 (Apple Silicon or Intel):
 
 ```sh
-python3 -m pip install camoscope==0.1.2
+python3 -m pip install camoscope==0.1.3
 camoscope --version
 ```
 
 Public distribution is through compiled **macOS wheels only**. Linux and
-other platforms have no compatible wheel. There is no Homebrew release yet.
+other platforms have no compatible wheel, so pip cannot install the published
+package there. A source checkout run on another operating system reports that
+the platform is not supported. There is no Homebrew release yet.
 
 ## First check
 
@@ -114,7 +112,7 @@ If you need help, use the [shared developer contact page](https://www.rajsharma.
 
 ## Release status
 
-Version `0.1.2` is a public beta. Automated tests cover command behavior and
+Version `0.1.3` is a public beta. Automated tests cover command behavior and
 important safety cases. A broader comparison with actual screen-sharing
 and recording apps across macOS versions is still pending. Treat Camoscope
 as an investigation aid, not a conclusive visibility or misconduct verdict.
