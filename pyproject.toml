@@ -1,22 +1,23 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=74.1", "Cython>=3.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "camoscope"
-version = "0.1.0"
+version = "0.1.1"
 description = "Inspect macOS windows with WindowServer sharing state zero and their owning processes."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.9,<3.15"
 license = "MIT"
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "Operating System :: MacOS",
-    "Operating System :: POSIX",
-    "Operating System :: Unix",
-    "Operating System :: Linux",
     "Environment :: Console",
     "Programming Language :: Python :: 3",
-    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
 ]
 dependencies = [
     "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
@@ -38,12 +39,21 @@ macos = [
 camoscope = "camoscope.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/rajiitmandi21/camoscope"
-Repository = "https://github.com/rajiitmandi21/camoscope"
-Issues = "https://github.com/rajiitmandi21/camoscope/issues"
+Homepage = "https://pypi.org/project/camoscope/"
+Documentation = "https://pypi.org/project/camoscope/"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools]
+include-package-data = false
+ext-modules = [
+    {name = "camoscope.cli", sources = ["src/camoscope/cli.pyx"]},
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*"
+test-command = "python -m camoscope --version"

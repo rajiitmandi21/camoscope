@@ -474,7 +474,7 @@ def main(argv=None):
         prog="camoscope",
         description="Inspect on-screen macOS windows with WindowServer sharing state zero.",
     )
-    parser.add_argument("--version", action="version", version="%(prog)s 0.1.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.1.1")
     parser.add_argument("--watch", action="store_true", help="continuously rescan for hidden windows")
     parser.add_argument("--no-prompt", action="store_true", help="scan once, print, and exit (no menu)")
     parser.add_argument("--quit", type=_positive_pid, metavar="PID", help="quit the process at PID non-interactively")

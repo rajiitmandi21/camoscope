@@ -1,5 +1,10 @@
 # Camoscope
 
+Camoscope is an opt-in local macOS audit utility. Installing or importing the
+package does not scan windows, read Accessibility content, or quit apps. It
+does not send scan results to a server. Those actions happen only when you
+run the corresponding CLI command.
+
 Camoscope is a macOS command-line tool for inspecting on-screen windows whose
 WindowServer `kCGWindowSharingState` is `0`. It lists the owning process,
 executable path and available code-signing metadata. With Accessibility
@@ -28,26 +33,27 @@ consent.
   usually ownership. Camoscope checks the process start time before
   escalation to reduce the chance of targeting a reused PID. Quit is
   destructive and is allowed only for a PID present in the current scan;
-  verify the PID before using it. It does not require
-  Accessibility permission.
+  verify the PID before using it. It does not require Accessibility
+  permission. `--quit` is never run during installation or a scan; it must
+  be explicitly selected in the interactive menu or supplied on the command
+  line.
 - Code-signing output is inspection metadata, **not** a signature validity
   verdict. Unknown, ad-hoc, or unsigned status alone does not establish that
   an app is malicious.
 
 ## Install
 
-The current distribution is a private Python package. With access to the
-private repository and an SSH key authorized for it:
+On macOS with CPython 3.9 through 3.14 (Apple Silicon or Intel):
 
 ```sh
-python3 -m pip install "git+ssh://git@github.com/rajiitmandi21/camoscope.git@v0.1.0"
+python3 -m pip install camoscope==0.1.1
 camoscope --version
 ```
 
-On macOS, installation includes PyObjC dependencies for WindowServer, AX and
-PID-bound app termination. On Linux, package metadata and `--help` work, but
-audit commands exit with a macOS-only error. A private Homebrew tap is not yet
-available. There is no public PyPI package to install.
+Installation includes PyObjC dependencies for WindowServer, AX and PID-bound
+app termination. Public distribution is through compiled **macOS wheels
+only**; Linux and other platforms have no compatible wheel. There is no
+Homebrew release yet.
 
 For a local checkout:
 
@@ -68,6 +74,12 @@ camoscope --stream PID --interval 3  # repeat until stopped or PID exits
 camoscope --quit PID                 # terminate the selected process
 ```
 
+Use `--no-content` for a metadata-only scan. The default scan tries to read
+AX content for matching apps, so it requires Accessibility permission. A
+denied permission or failed WindowServer enumeration is an error, not a
+negative finding. Camoscope prints results to the terminal and does not save
+them automatically.
+
 PIDs must be positive integers. `--interval` must be a positive finite
 number. `--quit` returns a nonzero exit status if the process cannot be
 terminated. Scan and AX permission failures also return nonzero status.
@@ -76,13 +88,17 @@ result.
 
 ## Release status
 
-Version `0.1.0` is the first private-beta candidate. Automated tests cover
-CLI routing and important safety/error paths. A full macOS capture-backend
-matrix and private Homebrew distribution are pending. See the repository's
-GitHub release for the exact commit and attached Python artifacts when a
-release is published.
+Version `0.1.1` is a public beta. Automated tests cover CLI routing and
+important safety/error paths. A controlled matrix comparing the flag with
+actual capture output across macOS versions and capture backends is still
+pending, so this tool should be treated as an audit aid rather than a
+conclusive screen-share integrity verdict. The package is built and uploaded
+through PyPI Trusted Publishing from a tagged release. The PyPI release
+contains compiled extension wheels and no source archive. The Python audit
+implementation is not included as readable `.py` files, but compiled code
+can still be reverse engineered; no local software can guarantee secrecy
+against someone who has the binary.
 
 ## License
 
-MIT; see [LICENSE](LICENSE). The release owner should confirm the license
-before wider distribution.
+MIT. The license text is included in the distribution.
