@@ -1,6 +1,7 @@
 # Camoscope
 
 [Project page and documentation](https://pypi.org/project/camoscope/) ·
+[Source code on GitHub](https://github.com/rajiitmandi21/camoscope) ·
 [Get help](https://www.rajsharma.space/#contact) ·
 [Support this and other apps](https://github.com/sponsors/rajiitmandi21)
 
@@ -117,7 +118,7 @@ important safety cases. A broader comparison with actual screen-sharing
 and recording apps across macOS versions is still pending. Treat Camoscope
 as an investigation aid, not a conclusive visibility or misconduct verdict.
 The PyPI release contains compiled macOS wheels and no source archive.
-Compiled code can still be reverse engineered.
+Source code is available on GitHub under the MIT license.
 
 ## License
 

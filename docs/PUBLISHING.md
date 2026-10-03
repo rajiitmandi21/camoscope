@@ -21,18 +21,17 @@ Publishing. Keep the publisher configuration aligned with these values:
 | GitHub environment | `pypi` |
 
 In the GitHub repository, restrict the `pypi` environment to tags matching
-`v*`. This private repository's current GitHub billing plan rejected the
-required-reviewer protection rule, so the workflow uses a manual
+`v*`. The workflow uses a manual
 `workflow_dispatch` input named `publish` (default `false`) as the release
 gate. Only the repository owner should dispatch it with `publish=true`. Keep
 the release workflow reviewable: a contributor who can change it can affect
 what gets published.
 
-The GitHub repository remains private. PyPI receives only compiled macOS
-wheels. The wheel contains a small Python entry-point stub and the compiled
-audit extension, with no readable `cli.py` or `.pyx` source. Compiled code
-can still be reverse engineered; this packaging limits casual source
-inspection rather than guaranteeing secrecy.
+The GitHub repository is public under the MIT license. Source is available
+for inspection and contribution. PyPI continues to distribute compiled macOS
+wheels without a source archive; that packaging is a distribution choice,
+not a source-secrecy claim. Review changes to the release workflow before
+merging or dispatching a publication.
 
 ## Release steps
 
