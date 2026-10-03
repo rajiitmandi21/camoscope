@@ -23,7 +23,10 @@ Publishing. Keep the publisher configuration aligned with these values:
 In the GitHub repository, restrict the `pypi` environment to tags matching
 `v*`. The workflow uses a manual
 `workflow_dispatch` input named `publish` (default `false`) as the release
-gate. Only the repository owner should dispatch it with `publish=true`. Keep
+gate. Only `rajiitmandi21` can reach the publish job: both the original actor and
+rerun actor must match that account. The `pypi` environment also requires
+that account’s approval and disallows administrator bypass. Because the
+owner dispatches and approves the release, self-approval is permitted. Keep
 the release workflow reviewable: a contributor who can change it can affect
 what gets published.
 

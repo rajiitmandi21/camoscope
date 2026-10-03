@@ -79,7 +79,7 @@ jobs:
 
   publish:
     needs: audit
-    if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/v') && github.actor == 'rajiitmandi21' && github.triggering_actor == 'rajiitmandi21' }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
